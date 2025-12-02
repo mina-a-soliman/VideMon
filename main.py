@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 import webbrowser
 
-# Set window size for mobile emulation
+# Set window size for mobile emulation jj
 Window.size = (400, 700)
 Window.clearcolor = (0.96, 0.96, 0.96, 1)
 
