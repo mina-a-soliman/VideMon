@@ -40,16 +40,17 @@ jobs:
           sudo apt-get install -y apktool
           sudo apt-get install -y clang
 
-      - name: Set up Buildozer
-        run: |
-          buildozer init  # if you don't have buildozer.spec yet, uncomment this line
+      # Removed buildozer init as the buildozer.spec already exists
+      # - name: Set up Buildozer
+      #   run: |
+      #     buildozer init  # if you don't have buildozer.spec yet, uncomment this line
 
       - name: Build APK
         run: |
           buildozer -v android debug  # or 'android release' if you want a release build
           
       - name: Upload APK to Artifacts
-        uses:  actions/upload-artifact@v4  # Using the latest version
+        uses: actions/upload-artifact@v4  # Using the latest version
         with:
           name: apk
           path: bin/*.apk
