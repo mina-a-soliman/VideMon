@@ -64,41 +64,28 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
-    # NEW STEP: Install Android SDK and required API
-    - name: Install Android SDK components
+    # NEW: Install Android SDK for Buildozer
+    - name: Install Android SDK for Buildozer
       run: |
-        # Check if Android SDK is already installed
-        if [ ! -d "$ANDROID_HOME" ]; then
-          echo "Android SDK not found in default location, setting up..."
-          # Create Android SDK directory
-          sudo mkdir -p /usr/local/lib/android/sdk
-          sudo chown -R $USER:$USER /usr/local/lib/android/sdk
-        fi
+        # Create directory for Buildozer's SDK
+        mkdir -p ~/.buildozer/android/platform/android-sdk
         
-        # Download and setup command-line tools if needed
-        if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
-          echo "Installing Android Command Line Tools..."
-          mkdir -p /tmp/android-sdk
-          cd /tmp/android-sdk
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-          rm -rf /tmp/android-sdk
-        fi
+        # Download and setup command-line tools in Buildozer's location
+        cd ~/.buildozer/android/platform/android-sdk
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip
+        mv cmdline-tools tools
         
-        # Accept licenses first (this is critical)
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        # Accept licenses
+        yes | ./tools/bin/sdkmanager --licenses || true
         
-        # Install required SDK components
-        echo "Installing Android SDK components..."
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-33"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platform-tools"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "build-tools;34.0.0"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393"  # Install NDK as well
+        # Install required components
+        ./tools/bin/sdkmanager --install "platforms;android-33"
+        ./tools/bin/sdkmanager --install "platform-tools"
+        ./tools/bin/sdkmanager --install "build-tools;34.0.0"
         
-        # Update PATH to include SDK tools
-        echo "export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+        # Make sure SDK is properly set up
+        ./tools/bin/sdkmanager --list
     
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
@@ -154,24 +141,37 @@ jobs:
     
     - name: Build with Buildozer
       env:
-        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-        ANDROID_HOME: /usr/local/lib/android/sdk
-        USE_SDK_WRAPPER: 1
+        # Point Buildozer to use the pre-installed SDK in its own directory
+        ANDROIDSDK: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        # Tell Buildozer not to download its own SDK
+        BUILDOZER_SKIP_SDK_DOWNLOAD: 1
+        USE_SDK_WRAPPER: 0
         GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m"
-        # Tell Buildozer to use pre-installed SDK instead of downloading its own
-        BUILDOZER_USE_EXISTING_SDK: 1
       run: |
-        # First, accept licenses for Buildozer's SDK if it still tries to use its own
-        mkdir -p ~/.android
-        echo "### User license for Android SDK tools (to accept licenses automatically)" > ~/.android/repositories.cfg
-        echo "count=0" >> ~/.android/repositories.cfg
+        # First, make sure Buildozer uses our pre-installed SDK
+        echo "Setting up Buildozer environment..."
         
-        # Accept Android SDK licenses
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        # Create a custom buildozer environment file
+        cat > buildozer_env.sh << 'EOF'
+        #!/bin/bash
+        export ANDROIDSDK="/home/runner/.buildozer/android/platform/android-sdk"
+        export ANDROID_HOME="/home/runner/.buildozer/android/platform/android-sdk"
+        export ANDROID_SDK_ROOT="/home/runner/.buildozer/android/platform/android-sdk"
+        export PATH="$ANDROIDSDK/tools/bin:$ANDROIDSDK/platform-tools:$PATH"
         
-        # Build the APK with verbose output
-        echo "Starting Buildozer build..."
-        buildozer -v android debug 2>&1 | tee build.log || {
+        # Accept all licenses one more time
+        yes | $ANDROIDSDK/tools/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+        
+        # Build with verbose output
+        buildozer -v android debug "$@"
+        EOF
+        
+        chmod +x buildozer_env.sh
+        
+        # Build the APK with our custom environment
+        ./buildozer_env.sh 2>&1 | tee build.log || {
           echo "Build failed, checking for autotools issues..."
           
           # If build fails due to libffi autotools, try to patch it
@@ -196,10 +196,21 @@ jobs:
             
             # Retry build
             echo "Retrying build after fixes..."
-            buildozer -v android debug
+            ./buildozer_env.sh
           else
-            # Re-throw error if it's not the autotools issue
-            exit 1
+            # Check if it's the API 33 issue
+            if grep -q "Requested API target 33 is not available" build.log; then
+              echo "API 33 not found, trying to install it..."
+              # Try to install API 33
+              cd /home/runner/.buildozer/android/platform/android-sdk
+              ./tools/bin/sdkmanager --install "platforms;android-33" || true
+              ./tools/bin/sdkmanager --install "build-tools;34.0.0" || true
+              echo "Retrying build after installing API 33..."
+              ./buildozer_env.sh
+            else
+              # Re-throw error if it's not the autotools issue
+              exit 1
+            fi
           fi
         }
     
