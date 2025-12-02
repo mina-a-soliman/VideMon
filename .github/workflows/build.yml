@@ -2,23 +2,25 @@ name: Build VideMon APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  workflow_dispatch:  # Manual trigger
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-android-apk:
+    runs-on: ubuntu-22.04
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -27,27 +29,254 @@ jobs:
           git \
           zip \
           unzip \
-          openjdk-17-jdk \
+          curl \
+          wget \
+          cmake \
+          ninja-build \
+          pkg-config \
+          libtool \
+          autoconf \
+          automake \
           libsdl2-dev \
           libsdl2-image-dev \
           libsdl2-mixer-dev \
           libsdl2-ttf-dev \
-          pkg-config \
           libgl1-mesa-dev \
           libgles2-mesa-dev \
-          python3-setuptools
+          python3-setuptools \
+          libffi-dev \
+          libssl-dev \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          openjdk-17-jdk
     
-    - name: Install Buildozer
+    - name: Install Buildozer and dependencies
       run: |
-        pip install --upgrade pip
-        pip install buildozer cython==0.29.33
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.33 virtualenv pillow
+        pip install yt-dlp ffmpeg-python pyperclip
     
-    - name: Build APK
+    - name: Create project structure
       run: |
-        buildozer android debug
+        mkdir -p VideMon
+        cd VideMon
+        echo "Creating project files..."
+        
+        # Create main.py
+        cat > main.py << 'EOF'
+        # PASTE YOUR COMPLETE MAIN.PY CODE HERE
+        EOF
+        
+        # Create requirements.txt
+        cat > requirements.txt << 'EOF'
+        kivy==2.2.1
+        yt-dlp
+        ffmpeg-python
+        Pillow
+        pyperclip
+        EOF
+        
+        # Create buildozer.spec
+        cat > buildozer.spec << 'EOF'
+        [app]
+        
+        # App information
+        title = VideMon Pro
+        package.name = videmonpro
+        package.domain = org.minasoliman
+        
+        # Version
+        version = 2.0.0
+        
+        # Source
+        source.dir = .
+        source.include_exts = py,png,jpg,kv,atlas,ttf,json
+        source.main = main.py
+        
+        # Requirements
+        requirements = python3,kivy==2.2.1,yt-dlp,ffmpeg-python,Pillow,pyperclip
+        
+        # Android permissions
+        android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, ACCESS_NETWORK_STATE
+        
+        # Android configuration
+        android.api = 33
+        android.minapi = 21
+        android.sdk = 33
+        android.ndk = 25b
+        android.arch = arm64-v8a
+        
+        # Build settings
+        orientation = portrait
+        fullscreen = 0
+        window.custom_titlebar = 1
+        
+        # Icons and splash
+        icon.filename = icon.png
+        presplash.filename = presplash.png
+        presplash.color = #1a5fb4
+        
+        # Release settings
+        release = 1
+        build.mode = release
+        build.config.debug = 0
+        
+        # Log level
+        log_level = 2
+        
+        # Extra build settings
+        android.extra_build_args = --optimize
+        android.accept_sdk_license = True
+        
+        # Packaging
+        android.allow_backup = true
+        android.verbose = true
+        EOF
+        
+        echo "Project structure created!"
     
-    - name: Upload APK
-      uses: actions/upload-artifact@v3
+    - name: Initialize Buildozer
+      run: |
+        cd VideMon
+        buildozer init
+    
+    - name: Build Android APK
+      run: |
+        cd VideMon
+        # Set environment variable to accept licenses
+        echo "y" | buildozer android clean
+        echo "y" | buildozer android update
+        buildozer android debug 2>&1 | tee build.log
+    
+    - name: Check for APK
+      run: |
+        cd VideMon
+        if ls bin/*.apk 1> /dev/null 2>&1; then
+          echo "APK found!"
+          ls -la bin/
+        else
+          echo "APK not found! Check build.log"
+          cat build.log
+          exit 1
+        fi
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
       with:
         name: VideMon-APK
-        path: bin/*.apk
+        path: VideMon/bin/*.apk
+        retention-days: 7
+    
+    - name: Upload build logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Build-Logs
+        path: |
+          VideMon/build.log
+          VideMon/.buildozer/*.log
+        retention-days: 7
+
+  build-windows-exe:
+    runs-on: windows-latest
+    needs: build-android-apk
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install kivy==2.2.1 yt-dlp ffmpeg-python Pillow pyperclip
+    
+    - name: Create Windows executable
+      run: |
+        # Create spec file for PyInstaller
+        $specContent = @'
+# -*- mode: python ; coding: utf-8 -*-
+import sys
+sys.setrecursionlimit(5000)
+
+block_cipher = None
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=[],
+    hiddenimports=[
+        'kivy',
+        'yt_dlp',
+        'ffmpeg',
+        'PIL',
+        'pyperclip',
+        'json',
+        'os',
+        'sys',
+        'threading',
+        'datetime'
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='VideMon',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # Change to False for no console window
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon='icon.ico'
+)
+'@
+        
+        # Create directory
+        New-Item -ItemType Directory -Force -Path "VideMon_Windows"
+        
+        # Write spec file
+        $specContent | Out-File -FilePath "VideMon_Windows/videmon.spec" -Encoding UTF8
+        
+        # Copy main.py
+        Copy-Item "main.py" -Destination "VideMon_Windows/main.py" -Force
+        
+        # Build with PyInstaller
+        cd VideMon_Windows
+        pyinstaller --onefile --windowed videmon.spec
+        
+        echo "Windows executable built!"
+    
+    - name: Upload Windows executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: VideMon-Windows
+        path: VideMon_Windows/dist/VideMon.exe
+        retention-days: 7
