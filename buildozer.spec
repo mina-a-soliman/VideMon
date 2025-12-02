@@ -1,5 +1,4 @@
 [app]
-
 # (str) Title of your application
 title = VideMon
 
@@ -35,7 +34,6 @@ version = 1.0
 # version.filename = %(source.dir)s/main.py
 
 # (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy==2.1.0,yt-dlp,pyperclip,urllib3,charset-normalizer,idna,requests
 
 # (str) Custom source folders for requirements
@@ -91,7 +89,7 @@ android.enable_androidx = True
 #android.add_activities = com.example.ExampleActivity
 
 # (str) Bootstrap
-android.bootstrap = sdl2
+p4a.bootstrap = sdl2  # Updated from android.bootstrap
 
 # (str) Android entry point, default is ok for Kivy-based app
 #android.entrypoint = org.kivy.android.PythonActivity
