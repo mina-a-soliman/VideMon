@@ -2,55 +2,203 @@ name: Build APK
 
 on:
   push:
-    branches:
-      - main  # Trigger the workflow on push to the main branch
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - main  # Trigger workflow on PRs targeting the main branch
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3  # Use v3 of the checkout action
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential python3-dev python3-pip
-          sudo apt-get install -y libsqlite3-dev libssl-dev libffi-dev
-          sudo apt-get install -y libgdk-pixbuf2.0-dev libjpeg-dev liblcms2-dev
-          sudo apt-get install -y libfreetype6-dev libpng-dev libjpeg8-dev
-          sudo apt-get install -y libx11-dev libxext-dev libxtst-dev libpng-dev
-          sudo apt-get install -y zlib1g-dev
-          pip install --upgrade pip
-          pip install kivy buildozer
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          ffmpeg \
+          libsdl2-dev \
+          libsdl2-image-dev \
+          libsdl2-mixer-dev \
+          libsdl2-ttf-dev \
+          libportmidi-dev \
+          libswscale-dev \
+          libavformat-dev \
+          libavcodec-dev \
+          zlib1g-dev \
+          libgstreamer1.0 \
+          gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-good \
+          libgstreamer1.0-dev \
+          openjdk-17-jdk \
+          zip \
+          unzip \
+          autoconf \
+          libtool \
+          pkg-config \
+          cmake \
+          ninja-build
+    
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v3
+      with:
+        path: .buildozer_global
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+    
+    - name: Cache Buildozer directory
+      uses: actions/cache@v3
+      with:
+        path: .buildozer
+        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+        restore-keys: |
+          ${{ runner.os }}-buildozer-
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+    
+    - name: Rename main Python file
+      run: |
+        # Buildozer expects main.py by default
+        if [ ! -f main.py ]; then
+          # Find the main Python file (adjust the name if different)
+          if [ -f videmon.py ]; then
+            cp videmon.py main.py
+          elif [ -f app.py ]; then
+            cp app.py main.py
+          fi
+        fi
+    
+    - name: Create version file
+      run: |
+        echo "1.0" > version.txt
+        echo "Build Date: $(date)" >> version.txt
+        echo "Git Commit: ${GITHUB_SHA::8}" >> version.txt
+    
+    - name: Build with Buildozer
+      env:
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        ANDROID_HOME: /usr/local/lib/android/sdk
+      run: |
+        # Accept Android SDK licenses
+        yes | buildozer android debug || true
+        
+        # Build the APK
+        buildozer -v android debug
+    
+    - name: Sign APK (Optional)
+      if: false  # Set to true if you want to sign
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        # Add your signing commands here if needed
+        echo "Signing APK..."
+    
+    - name: Get APK path
+      id: apk-path
+      run: |
+        APK_PATH=$(find bin -name "*.apk" -type f | head -n 1)
+        echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+        echo "APK found at: $APK_PATH"
+    
+    - name: Rename APK with version
+      run: |
+        APK_PATH="${{ steps.apk-path.outputs.apk_path }}"
+        if [ -f "$APK_PATH" ]; then
+          VERSION="1.0"
+          BUILD_DATE=$(date +%Y%m%d)
+          NEW_NAME="VideMon-v${VERSION}-${BUILD_DATE}-${GITHUB_SHA::8}.apk"
+          cp "$APK_PATH" "bin/$NEW_NAME"
+          echo "Renamed APK to: $NEW_NAME"
+        fi
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: videmon-apk
+        path: bin/*.apk
+        retention-days: 30
+    
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v1.0-${{ github.run_number }}
+        release_name: VideMon v1.0 Build ${{ github.run_number }}
+        body: |
+          ## VideMon - YouTube Downloader Pro
           
-      - name: Install buildozer dependencies
-        run: |
-          sudo apt-get install -y openjdk-8-jdk
-          sudo apt-get install -y zipalign
-          sudo apt-get install -y apktool
-          sudo apt-get install -y clang
-
-      # Removed buildozer init as the buildozer.spec already exists
-      # - name: Set up Buildozer
-      #   run: |
-      #     buildozer init  # if you don't have buildozer.spec yet, uncomment this line
-
-      - name: Build APK
-        run: |
-          buildozer -v android debug  # or 'android release' if you want a release build
+          ### Features
+          - Download YouTube videos in multiple qualities
+          - Support for playlists
+          - Multiple format options (MP4, MP3, WEBM)
+          - Modern Material Design UI
+          - Download progress tracking
           
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4  # Using the latest version
-        with:
-          name: apk
-          path: bin/*.apk
+          ### Installation
+          1. Download the APK file below
+          2. Enable "Install from Unknown Sources" on your Android device
+          3. Install the APK
+          
+          ### Build Info
+          - Build Date: ${{ github.event.head_commit.timestamp }}
+          - Commit: ${{ github.sha }}
+          - Branch: ${{ github.ref }}
+          
+          **Note:** This is an automated build from GitHub Actions
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.apk-path.outputs.apk_path }}
+        asset_name: VideMon-v1.0-build${{ github.run_number }}.apk
+        asset_content_type: application/vnd.android.package-archive
+    
+    - name: Build Summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "✅ APK built successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **App Name:** VideMon" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version:** 1.0" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** ${GITHUB_SHA::8}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "${{ steps.apk-path.outputs.apk_path }}" ]; then
+          APK_SIZE=$(du -h "${{ steps.apk-path.outputs.apk_path }}" | cut -f1)
+          echo "- **APK Size:** $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📦 Download the APK from the Artifacts section above" >> $GITHUB_STEP_SUMMARY
