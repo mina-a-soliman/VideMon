@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches:
-      - main  # Trigger the workflow on push to main branch
+      - main  # Trigger the workflow on push to the main branch
   pull_request:
     branches:
       - main  # Trigger workflow on PRs targeting the main branch
@@ -14,7 +14,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3  # Use v3 of the checkout action
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -49,7 +49,7 @@ jobs:
           buildozer -v android debug  # or 'android release' if you want a release build
           
       - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3  # Updated to v3
         with:
           name: apk
           path: bin/*.apk
