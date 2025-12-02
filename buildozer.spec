@@ -264,12 +264,13 @@ android.allow_backup = True
 #
 
 # (str) python-for-android URL, defaults to upstream kivy/python-for-android
-#p4a.url = https://github.com/kivy/python-for-android.git
+p4a.url = https://github.com/kivy/python-for-android.git
 
 # (str) python-for-android branch to use, defaults to master
-#p4a.branch = master
+p4a.branch = develop
 
 # (str) python-for-android specific commit to use, defaults to HEAD, must be within p4a.branch
+# Using a stable commit that has autotools fixes
 #p4a.commit = HEAD
 
 # (str) python-for-android git clone directory (if empty, it will be automatically cloned from github)
@@ -296,7 +297,7 @@ android.allow_backup = True
 #p4a.setup_py = false
 
 # (str) extra command line arguments to pass when invoking pythonforandroid.toolchain
-#p4a.extra_args =
+p4a.extra_args = --ignore-setup-py
 
 
 #
