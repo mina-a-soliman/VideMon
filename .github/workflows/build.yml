@@ -44,10 +44,13 @@ jobs:
           zip \
           unzip \
           autoconf \
+          automake \
           libtool \
+          libtool-bin \
           pkg-config \
           cmake \
-          ninja-build
+          ninja-build \
+          libltdl-dev
     
     - name: Set up Java
       uses: actions/setup-java@v4
@@ -74,6 +77,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install buildozer cython==0.29.36
     
+    - name: Fix autotools for libffi (Common p4a issue)
+      run: |
+        # Pre-create buildozer directories to fix autotools issues
+        mkdir -p ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/libffi/arm64-v8a__ndk_target_21
+        mkdir -p ~/.buildozer/android/platform/build-armeabi-v7a/build/other_builds/libffi/armeabi-v7a__ndk_target_21
+        
+        # Set environment variables to help with autotools
+        echo "export ACLOCAL_PATH=/usr/share/aclocal" >> ~/.bashrc
+        echo "export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig" >> ~/.bashrc
+        
+        # Make fix script executable if it exists
+        if [ -f fix_autotools.sh ]; then
+          chmod +x fix_autotools.sh
+        fi
+    
     - name: Rename main Python file
       run: |
         # Buildozer expects main.py by default
@@ -96,12 +114,44 @@ jobs:
       env:
         ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         ANDROID_HOME: /usr/local/lib/android/sdk
+        USE_SDK_WRAPPER: 1
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m"
       run: |
         # Accept Android SDK licenses
         yes | buildozer android debug || true
         
-        # Build the APK
-        buildozer -v android debug
+        # Build the APK with verbose output
+        buildozer -v android debug 2>&1 | tee build.log || {
+          echo "Build failed, checking for autotools issues..."
+          
+          # If build fails due to libffi autotools, try to patch it
+          if grep -q "LT_SYS_SYMBOL_USCORE" build.log; then
+            echo "Detected autotools macro issue, attempting fix..."
+            
+            # Find and patch libffi configure.ac if it exists
+            LIBFFI_DIRS=$(find ~/.buildozer -type d -name "libffi-*" 2>/dev/null || true)
+            
+            for dir in $LIBFFI_DIRS; do
+              if [ -f "$dir/configure.ac" ]; then
+                echo "Patching $dir/configure.ac"
+                # Add m4_pattern_allow at the top of configure.ac
+                sed -i '1i m4_pattern_allow([LT_SYS_SYMBOL_USCORE])' "$dir/configure.ac"
+                
+                # Regenerate configure script
+                cd "$dir"
+                autoreconf -fi || true
+                cd -
+              fi
+            done
+            
+            # Retry build
+            echo "Retrying build after fixes..."
+            buildozer -v android debug
+          else
+            # Re-throw error if it's not the autotools issue
+            exit 1
+          fi
+        }
     
     - name: Sign APK (Optional)
       if: false  # Set to true if you want to sign
