@@ -188,41 +188,41 @@ jobs:
         path: bin/*.apk
         retention-days: 30
     
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      id: create_release
-      uses: softprops/action-gh-release@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v1.0-${{ github.run_number }}
-        name: VideMon v1.0 Build ${{ github.run_number }}
-        body: |
-          ## VideMon - YouTube Downloader Pro
+    # - name: Create Release
+    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #   id: create_release
+    #   uses: softprops/action-gh-release@v2
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   with:
+    #     tag_name: v1.0-${{ github.run_number }}
+    #     name: VideMon v1.0 Build ${{ github.run_number }}
+    #     body: |
+    #       ## VideMon - YouTube Downloader Pro
           
-          ### Features
-          - Download YouTube videos in multiple qualities
-          - Support for playlists
-          - Multiple format options (MP4, MP3, WEBM)
-          - Modern Material Design UI
-          - Download progress tracking
+    #       ### Features
+    #       - Download YouTube videos in multiple qualities
+    #       - Support for playlists
+    #       - Multiple format options (MP4, MP3, WEBM)
+    #       - Modern Material Design UI
+    #       - Download progress tracking
           
-          ### Installation
-          1. Download the APK file below
-          2. Enable "Install from Unknown Sources" on your Android device
-          3. Install the APK
+    #       ### Installation
+    #       1. Download the APK file below
+    #       2. Enable "Install from Unknown Sources" on your Android device
+    #       3. Install the APK
           
-          ### Build Info
-          - Build Date: ${{ github.event.head_commit.timestamp }}
-          - Commit: ${{ github.sha }}
-          - Branch: ${{ github.ref }}
+    #       ### Build Info
+    #       - Build Date: ${{ github.event.head_commit.timestamp }}
+    #       - Commit: ${{ github.sha }}
+    #       - Branch: ${{ github.ref }}
           
-          **Note:** This is an automated build from GitHub Actions
-        draft: false
-        prerelease: false
-        files: |
-          ${{ steps.apk-path.outputs.apk_path }}
-          bin/*.apk
+    #       **Note:** This is an automated build from GitHub Actions
+    #     draft: false
+    #     prerelease: false
+    #     files: |
+    #       ${{ steps.apk-path.outputs.apk_path }}
+    #       bin/*.apk
     
     - name: Build Summary
       run: |
