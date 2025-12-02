@@ -5,7 +5,7 @@ package.domain = org.videmon
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf
 version = 1.0.0
-orientation = portrait
+orientation = portrait  # Keep this line for orientation
 fullscreen = 0
 presplash = 
 icon.filename = icon.png
@@ -19,9 +19,6 @@ requirements = python3,kivy,yt-dlp,pyperclip
 # (bool) Indicate if the application should use AndroidX libraries.
 android.enable_androidx = True
 
-# (str) Supported orientation (one of landscape, portrait, all)
-orientation = portrait
-
 # Permissions
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
@@ -33,5 +30,3 @@ android.minapi = 21
 android.sdk = 33
 android.ndk = 25b
 android.arch = armeabi-v7a,arm64-v8a
-
-
