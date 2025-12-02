@@ -66,7 +66,7 @@ jobs:
       run: |
         # Create a minimal buildozer.spec file
         cat > buildozer.spec << 'EOF'
-[app]
+
 
 # (str) Title of your application
 title = VideMon
